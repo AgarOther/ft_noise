@@ -7,7 +7,6 @@ NAME				=	noise
 
 # Sources & Includes
 SRCS				= 	srcs/main.cpp \
-						srcs/maths.cpp \
 						srcs/Noise.cpp
 LIBS_SRC			=	libs/stb/stb_image.cpp
 OBJ_FOLDER			=	objs

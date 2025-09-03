@@ -1,69 +1,63 @@
 #include "Noise.hpp"
-#include "stb_image.h"
-#include "stb_image_write.h"
-#include "Noise.hpp"
-#include <cstdint>
-#include <vector>
-#include <ctime>
+#include <algorithm>
+#include <cmath>
+#include <glm/glm.hpp>
+#include <random>
 
-static std::pair<double, double> getGradientVector()
+Noise::Noise(unsigned long seed)
 {
-	switch (rand() % 8)
-	{
-		case 0: return {1.0, 0.0};
-		case 1: return {-1.0, 0.0};
-		case 2: return {0.0, 1.0};
-		case 3: return {0.0, -1.0};
-		case 4: return {1.0, 1.0};
-		case 5: return {-1.0, -1.0};
-		case 6: return {1.0, -1.0};
-		default: return {-1.0, 1.0};
-	};
+	_permutationTable.resize(PERMUTATION_TABLE_SIZE * 2);
+	for (int i = 0; i < PERMUTATION_TABLE_SIZE; ++i)
+		_permutationTable.push_back(i);
+	std::shuffle(_permutationTable.begin(), _permutationTable.end(), std::default_random_engine(seed));
+	_permutationTable.insert(_permutationTable.end(), _permutationTable.begin(), _permutationTable.end());
 }
 
-Noise::Noise(unsigned long long seed, double amplitude, double frequency):
-	_amplitude(amplitude), _frequency(frequency)
+static glm::vec2 getConstantVector(int permutationValue)
 {
-	const int blockX = GRID_WIDTH / BLOCK_SIZE;
-	const int blockY = GRID_HEIGHT / BLOCK_SIZE;
-	std::pair<double, double> gradientVectors [blockX][blockY];
-	std::vector<uint8_t> data;
-
-	srand(seed);
-	for (int x = 0; x < blockX; ++x)
+	switch (permutationValue % 4)
 	{
-		for (int y = 0; y < blockY; ++y)
-			gradientVectors[x][y] = normalize(getGradientVector());
+		case 0: return {1.0, 1.0};
+		case 1: return {-1.0, 1.0};
+		case 2: return {1.0, -1.0};
+		default: return {-1.0, -1.0};
 	}
-	for (size_t x = 0; x < GRID_WIDTH; ++x)
-	{
-		for (size_t y = 0; y < GRID_HEIGHT; ++y)
-		{
-			int gridX = x / BLOCK_SIZE;
-			int gridY = y / BLOCK_SIZE;
+}
 
-			double dx = (x - gridX * BLOCK_SIZE) / static_cast<double>(BLOCK_SIZE);
-			double dy = (y - gridY * BLOCK_SIZE) / static_cast<double>(BLOCK_SIZE);
+static double lerp(double t, double a1, double a2)
+{
+	return a1 + t * (a2 - a1);
+}
 
-			int x1 = std::min(gridX + 1, blockX - 1);
-			int y1 = std::min(gridY + 1, blockY - 1);
+static double fade(double t)
+{
+	return ((6 * t - 15) * t + 10) * t * t * t;
+}
 
-			std::pair<double, double> topLeft = gradientVectors[gridX][gridY];
-			double topLeftDot = dot(topLeft, {dx, dy});
-			std::pair<double, double> topRight = gradientVectors[x1][gridY];
-			double topRightDot = dot(topRight, {dx - 1, dy});
-			std::pair<double, double> bottomLeft = gradientVectors[gridX][y1];
-			double bottomLeftDot = dot(bottomLeft, {dx, dy - 1});
-			std::pair<double, double> bottomRight = gradientVectors[x1][y1];
-			double bottomRightDot = dot(bottomRight, {dx - 1, dy - 1});
+double Noise::getNoise(double x, double y)
+{
+	const int X = static_cast<int>(std::floor(x)) & 255;
+	const int Y = static_cast<int>(std::floor(y)) & 255;
 
-			double tX = fade((x % BLOCK_SIZE) / static_cast<double>(BLOCK_SIZE));
-			double tY = fade((y % BLOCK_SIZE) / static_cast<double>(BLOCK_SIZE));
+	const double xf = x - std::floor(x);
+	const double yf = y - std::floor(y);
 
-			double topValue = lerp(topLeftDot, topRightDot, tX);
-			double bottomValue = lerp(bottomLeftDot, bottomRightDot, tX);
-			data.push_back(((lerp(topValue, bottomValue, tY) * _amplitude + 1) / 2 * 255));
-		}
-	}
-	stbi_write_png("noise.png", GRID_WIDTH, GRID_HEIGHT, 1, data.data(), GRID_WIDTH);
+	const glm::vec2 topRight(xf - 1.0, yf - 1.0);
+	const glm::vec2 topLeft(xf, yf - 1.0);
+	const glm::vec2 bottomRight(xf - 1.0, yf);
+	const glm::vec2 bottomLeft(xf, yf);
+
+	const int valueTopRight = _permutationTable[_permutationTable[X + 1]+ Y + 1];
+	const int valueTopLeft = _permutationTable[_permutationTable[X]+ Y + 1];
+	const int valueBottomRight = _permutationTable[_permutationTable[X + 1]+ Y];
+	const int valueBottomLeft = _permutationTable[_permutationTable[X]+ Y];
+
+	const double dotTopRight = glm::dot(topRight, getConstantVector(valueTopRight));
+	const double dotTopLeft = glm::dot(topLeft, getConstantVector(valueTopLeft));
+	const double dotBottomRight = glm::dot(bottomRight, getConstantVector(valueBottomRight));
+	const double dotBottomLeft = glm::dot(bottomLeft, getConstantVector(valueBottomLeft));
+
+	const double u = fade(xf);
+	const double v = fade(yf);
+	return (lerp(u, lerp(v, dotBottomLeft, dotTopLeft), lerp(v, dotBottomRight, dotTopRight)));
 }
