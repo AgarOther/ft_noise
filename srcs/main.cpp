@@ -5,13 +5,13 @@
 
 int main(void)
 {
-	Noise noise(42);
+	Noise noise(42, FREQUENCY, AMPLITUDE);
 
 	std::vector<uint8_t> data;
 
-	for (int x = 0; x < 256; ++x)
-		for (int y = 0; y < 256; ++y)
-			data.push_back(std::round(255 * (((noise.getNoise(x * FREQUENCY, y * FREQUENCY) + 1.0) / 2.0))));
+	for (int x = 0; x < 1024; ++x)
+		for (int y = 0; y < 1024; ++y)
+			data.push_back(NOISIFY(noise.getNoise(x, y, 5)));
 	
-	stbi_write_png("noise.png", 256, 256, 1, data.data(), 256);
+	stbi_write_png("noise.png", 1024, 1024, 1, data.data(), 1024);
 }
